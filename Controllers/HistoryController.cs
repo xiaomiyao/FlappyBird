@@ -19,26 +19,26 @@ namespace FlappyBird.Controllers
             _mongo = mongo;
         }
 
-        // GET /api/history?limit=10&offset=0&sort=desc
+        // GET /api/history?pageLimit=10&recordsToSkip=0&sortOrder=desc
         [HttpGet]
         public async Task<IActionResult> GetHistory(
-            [FromQuery] int limit = 10,
-            [FromQuery] int offset = 0,
-            [FromQuery] string sort = "desc")
+            [FromQuery(Name = "pageLimit")] int pageLimit = 10,
+            [FromQuery(Name = "recordsToSkip")] int recordsToSkip = 0,
+            [FromQuery(Name = "sortOrder")] string sortOrder = "desc")
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (!Guid.TryParse(userId, out var guid))
                 return Unauthorized();
 
-            var sortDef = sort.ToLower() == "asc"
+            var sortDef = sortOrder.ToLower() == "asc"
                 ? Builders<GameSession>.Sort.Ascending(s => s.StartedAt)
                 : Builders<GameSession>.Sort.Descending(s => s.StartedAt);
 
             var history = await _mongo.GameSessions
                 .Find(s => s.UserId == guid)
                 .Sort(sortDef)
-                .Skip(offset)
-                .Limit(limit)
+                .Skip(recordsToSkip)
+                .Limit(pageLimit)
                 .ToListAsync();
 
             return Ok(history);
