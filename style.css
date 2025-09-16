@@ -348,3 +348,46 @@ body {
 .history-score {
     font-weight: bold;
 }
+
+.history-tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.tab-btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.1);
+    color: white;
+    cursor: pointer;
+}
+
+.tab-btn.active {
+    background: rgba(255,255,255,0.3);
+}
+
+.history-content {
+    display: none;
+}
+
+.history-content.active {
+    display: block;
+}
+
+.transaction-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.transaction-item.deposit {
+    background: rgba(0,255,0,0.05);
+}
+
+.transaction-item.withdrawal {
+    background: rgba(255,255,0,0.05);
+}
+

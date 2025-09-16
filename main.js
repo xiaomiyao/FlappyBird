@@ -17,6 +17,107 @@ let gameState = {
     pipeGap: 150
 };
 
+const TESTNET_CHAIN_ID = '0x5'; // Goerli testnet
+
+async function checkMetaMask() {
+    if (typeof window.ethereum === 'undefined') {
+        alert('Пожалуйста, установите MetaMask');
+        return false;
+    }
+    
+    try {
+        const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+        if (chainId !== TESTNET_CHAIN_ID) {
+            await window.ethereum.request({
+                method: 'wallet_switchEthereumChain',
+                params: [{ chainId: TESTNET_CHAIN_ID }],
+            });
+        }
+        
+        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+        return accounts[0];
+    } catch (error) {
+        console.error('MetaMask error:', error);
+        alert('Ошибка подключения к MetaMask');
+        return false;
+    }
+}
+
+// Замените существующие функции deposit и withdraw на:
+async function depositWithMetaMask() {
+    const account = await checkMetaMask();
+    if (!account) return;
+    
+    const amount = document.getElementById('cryptoAmount').value;
+    const amountWei = ethers.utils.parseEther(amount);
+    
+    try {
+        const tx = await window.ethereum.request({
+            method: 'eth_sendTransaction',
+            params: [{
+                from: account,
+                to: '0xYOUR_CONTRACT_ADDRESS', // Замените на адрес вашего контракта
+                value: ethers.utils.hexlify(amountWei)
+            }],
+        });
+        
+        if (!currentUser.transactionHistory) {
+            currentUser.transactionHistory = [];
+        }
+        
+        currentUser.transactionHistory.unshift({
+            type: 'deposit',
+            amount: amount,
+            timestamp: Date.now(),
+            txHash: tx
+        });
+        
+        currentUser.balance += parseFloat(amount) * 1000; // Конвертируем ETH в игровые монеты
+        updateBalance();
+        updateTransactionHistory();
+        
+        alert('Депозит успешно выполнен!');
+    } catch (error) {
+        console.error('Deposit error:', error);
+        alert('Ошибка при выполнении депозита');
+    }
+}
+
+async function withdrawWithMetaMask() {
+    const account = await checkMetaMask();
+    if (!account) return;
+    
+    const amount = document.getElementById('cryptoAmount').value;
+    const gameTokens = parseFloat(amount) * 1000;
+    
+    if (gameTokens > currentUser.balance) {
+        alert('Недостаточно средств');
+        return;
+    }
+    
+    try {
+        if (!currentUser.transactionHistory) {
+            currentUser.transactionHistory = [];
+        }
+        
+        currentUser.transactionHistory.unshift({
+            type: 'withdrawal',
+            amount: amount,
+            timestamp: Date.now(),
+            txHash: 'pending'
+        });
+        
+        currentUser.balance -= gameTokens;
+        updateBalance();
+        updateTransactionHistory();
+        
+        alert('Вывод средств запрошен!');
+    } catch (error) {
+        console.error('Withdrawal error:', error);
+        alert('Ошибка при выводе средств');
+    }
+}
+
 // Инициализация при загрузке страницы
 window.onload = function() {
     init();
@@ -96,7 +197,8 @@ function register() {
             totalWins: 0,
             totalLosses: 0
         },
-        gameHistory: [] // Массив для истории игр
+        gameHistory: [], // Массив для истории игр
+        transactionHistory: [] //Массив для истории транзакций крипты 
     };
 
     alert('Регистрация успешна! Теперь войдите в систему.');
@@ -127,7 +229,10 @@ function showScreen(screenId) {
     
     // Обновляем данные профиля при переходе на экран профиля
     if (screenId === 'profileScreen') {
-        updateProfileData();
+        // Добавляем более длительную задержку для загрузки DOM
+        setTimeout(() => {
+            updateProfileData();
+        }, 300);
     }
 }
 
@@ -388,6 +493,8 @@ function endGame(won) {
         difficulty: gameState.difficulty
     });
 
+    console.log('История игр обновлена:', currentUser.gameHistory); // Для отладки
+
     updateBalance();
     dialog.style.display = 'block';
 }
@@ -406,6 +513,19 @@ function updateProfileData() {
     if (!currentUser.gameHistory) {
         currentUser.gameHistory = [];
     }
+    if (!currentUser.transactionHistory) {
+        currentUser.transactionHistory = [];
+    }
+    
+    // Проверяем, что элементы профиля существуют
+    const profileElements = ['profileUsername', 'profileBalance', 'totalGames', 'totalWins', 'winRate'];
+    const allElementsExist = profileElements.every(id => document.getElementById(id) !== null);
+    
+    if (!allElementsExist) {
+        console.log('Не все элементы профиля найдены, повторяем через 200мс');
+        setTimeout(updateProfileData, 200);
+        return;
+    }
     
     // Обновляем основную информацию
     document.getElementById('profileUsername').textContent = currentUser.username;
@@ -419,41 +539,68 @@ function updateProfileData() {
         : 0;
     document.getElementById('winRate').textContent = `${winRate}%`;
     
-    // Обновляем историю игр
-    updateGameHistory();
+    console.log('Обновляем профиль, история игр:', currentUser.gameHistory);
+    
+    // Убеждаемся, что вкладка "История игр" активна
+    const gamesHistory = document.getElementById('gamesHistory');
+    if (gamesHistory) {
+        gamesHistory.classList.add('active');
+    }
+    
+    // Обновляем историю игр и транзакций
+    setTimeout(() => {
+        updateGameHistory();
+        updateTransactionHistory();
+    }, 100);
 }
 
 function updateGameHistory() {
-    const historyList = document.getElementById('historyList');
-    const history = currentUser.gameHistory || [];
+    // Ждем, пока элемент не появится в DOM
+    let attempts = 0;
+    const maxAttempts = 10;
     
-    if (history.length === 0) {
-        historyList.innerHTML = '<div class="history-empty">История игр пуста</div>';
-        return;
-    }
-    
-    const historyHTML = history.map(game => {
-        const resultClass = game.won ? 'win' : 'loss';
-        const resultText = game.won ? `Победа (+${game.winAmount})` : `Поражение (-${game.betAmount})`;
-        const time = formatTime(game.timestamp);
-        const difficultyText = getDifficultyText(game.difficulty);
+    const tryUpdate = () => {
+        const historyList = document.getElementById('gameHistoryList');
         
-        return `
-            <div class="history-item ${resultClass}">
-                <div class="history-header">
-                    <span class="history-result ${resultClass}">${resultText}</span>
-                    <span class="history-time">${time}</span>
+        if (!historyList && attempts < maxAttempts) {
+            attempts++;
+            console.log(`Попытка ${attempts}: элемент gameHistoryList не найден, повторяем через 100мс`);
+            setTimeout(tryUpdate, 100);
+            return;
+        }
+        
+        if (!historyList) {
+            console.error('Элемент gameHistoryList не найден после всех попыток');
+            return;
+        }
+        
+        if (!currentUser || !currentUser.gameHistory || currentUser.gameHistory.length === 0) {
+            historyList.innerHTML = '<div class="history-empty">История игр пуста</div>';
+            return;
+        }
+
+        console.log('Отображаем историю игр:', currentUser.gameHistory);
+
+        const historyHTML = currentUser.gameHistory.map(game => `
+            <div class="history-item ${game.won ? 'win' : 'loss'}">
+                <div class="history-info">
+                    <div class="history-result">${game.won ? 'Победа' : 'Поражение'}</div>
+                    <div class="history-time">${formatTime(game.timestamp)}</div>
                 </div>
                 <div class="history-details">
-                    <span>Ставка: ${game.betAmount}</span>
-                    <span class="history-score">${game.score}/${game.targetBarriers}</span>
-                    <span>${difficultyText}</span>
+                    <div class="history-bet">Ставка: ${game.betAmount}</div>
+                    <div class="history-win">Выигрыш: ${game.winAmount}</div>
+                    <div class="history-score">Счёт: ${game.score}/${game.targetBarriers}</div>
+                    <div class="history-difficulty">Сложность: ${getDifficultyText(game.difficulty)}</div>
                 </div>
             </div>
-        `;
-    }).join('');
+        `).join('');
+        
+        historyList.innerHTML = historyHTML;
+        console.log('История игр успешно обновлена');
+    };
     
-    historyList.innerHTML = historyHTML;
+    tryUpdate();
 }
 
 function formatTime(timestamp) {
@@ -499,5 +646,95 @@ function clearHistory() {
             totalLosses: 0
         };
         updateProfileData();
+    }
+}
+
+function switchHistoryTab(tab) {
+    // Обновляем активную кнопку
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    // Находим кнопку, которая была нажата
+    const buttons = document.querySelectorAll('.tab-btn');
+    if (tab === 'games') {
+        buttons[0].classList.add('active');
+    } else {
+        buttons[1].classList.add('active');
+    }
+
+    // Показываем нужный контент
+    document.querySelectorAll('.history-content').forEach(content => {
+        content.classList.remove('active');
+    });
+    
+    if (tab === 'games') {
+        const gamesHistory = document.getElementById('gamesHistory');
+        if (gamesHistory) {
+            gamesHistory.classList.add('active');
+        }
+        setTimeout(updateGameHistory, 50);
+    } else {
+        const transactionsHistory = document.getElementById('transactionsHistory');
+        if (transactionsHistory) {
+            transactionsHistory.classList.add('active');
+        }
+        setTimeout(updateTransactionHistory, 50);
+    }
+}
+
+// Добавить новые функции
+function updateTransactionHistory() {
+    // Ждем, пока элемент не появится в DOM
+    let attempts = 0;
+    const maxAttempts = 10;
+    
+    const tryUpdate = () => {
+        const historyList = document.getElementById('transactionHistoryList');
+        
+        if (!historyList && attempts < maxAttempts) {
+            attempts++;
+            console.log(`Попытка ${attempts}: элемент transactionHistoryList не найден, повторяем через 100мс`);
+            setTimeout(tryUpdate, 100);
+            return;
+        }
+        
+        if (!historyList) {
+            console.error('Элемент transactionHistoryList не найден после всех попыток');
+            return;
+        }
+        
+        if (!currentUser || !currentUser.transactionHistory || currentUser.transactionHistory.length === 0) {
+            historyList.innerHTML = '<div class="history-empty">История транзакций пуста</div>';
+            return;
+        }
+
+        historyList.innerHTML = currentUser.transactionHistory.map(tx => `
+            <div class="transaction-item ${tx.type}">
+                <div class="transaction-info">
+                    <div class="transaction-type">
+                        ${tx.type === 'deposit' ? 'Пополнение' : 'Вывод'}
+                    </div>
+                    <div class="transaction-date">
+                        ${new Date(tx.timestamp).toLocaleString()}
+                    </div>
+                </div>
+                <div class="transaction-amount">
+                    ${tx.type === 'deposit' ? '+' : '-'}${tx.amount} ETH
+                </div>
+            </div>
+        `).join('');
+        console.log('История транзакций успешно обновлена');
+    };
+    
+    tryUpdate();
+}
+
+function clearTransactionHistory() {
+    if (!currentUser) return;
+    
+    if (confirm('Вы уверены, что хотите очистить историю транзакций?')) {
+        currentUser.transactionHistory = [];
+        updateTransactionHistory();
     }
 }
