@@ -17,7 +17,7 @@ let gameState = {
     pipeGap: 150
 };
 
-const TESTNET_CHAIN_ID = '0x5'; // Goerli testnet
+const TESTNET_CHAIN_ID = '0xaa36a7'; // Sepolia testnet
 
 async function checkMetaMask() {
     if (typeof window.ethereum === 'undefined') {
