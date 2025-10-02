@@ -49,15 +49,16 @@ async function depositWithMetaMask() {
     if (!account) return;
     
     const amount = document.getElementById('cryptoAmount').value;
-    const amountWei = ethers.utils.parseEther(amount);
+    // Конвертируем ETH в Wei (1 ETH = 10^18 Wei)
+    const amountWei = '0x' + (parseFloat(amount) * 1e18).toString(16);
     
     try {
         const tx = await window.ethereum.request({
             method: 'eth_sendTransaction',
             params: [{
                 from: account,
-                to: '0xYOUR_CONTRACT_ADDRESS', // Замените на адрес вашего контракта
-                value: ethers.utils.hexlify(amountWei)
+                to: '0xAa29Ea824F38CD4A980680F250b6d721C30B5F64', // Замените на адрес вашего контракта
+                value: amountWei
             }],
         });
         
