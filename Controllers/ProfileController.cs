@@ -20,8 +20,28 @@ namespace FlappyBird.Controllers
             _mongo = mongo;
         }
 
-        [HttpPost]
-        public async Task<IActionResult> UpdateUsername([FromBody] UpdateUsernameRequest request)
+        [HttpGet("profile")]
+        public async Task<IActionResult> GetProfile()
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!Guid.TryParse(userId, out var guid))
+                return Unauthorized();
+
+            var user = await _mongo.Users.Find(u => u.Id == guid).FirstOrDefaultAsync();
+            if (user == null)
+                return NotFound(new { message = "User not found." });
+
+            return Ok(new
+            {
+                id = user.Id,
+                username = user.Username,
+                balance = user.Balance,
+                gameSessionCount = user.GameSessionIds?.Count ?? 0
+            });
+        }
+
+        [HttpPut("profile")]
+        public async Task<IActionResult> UpdateProfile([FromBody] UpdateUsernameRequest request)
         {
             if (string.IsNullOrWhiteSpace(request.NewUsername))
                 return BadRequest(new { message = "Username cannot be empty." });
@@ -37,7 +57,7 @@ namespace FlappyBird.Controllers
             user.Username = request.NewUsername;
             await _mongo.Users.ReplaceOneAsync(u => u.Id == guid, user);
 
-            return Ok(new { message = "Username updated", username = user.Username });
+            return Ok(new { message = "Profile updated", username = user.Username });
         }
     }
 }

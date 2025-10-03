@@ -39,5 +39,25 @@ namespace FlappyBird.Controllers
                 balance = result.Balance
             });
         }
+
+        [HttpPost("logout")]
+        public IActionResult Logout()
+        {
+            return Ok(new { message = "Logged out successfully." });
+        }
+
+        [HttpGet("verify")]
+        public async Task<IActionResult> Verify()
+        {
+            var token = Request.Headers["Authorization"].FirstOrDefault()?.Split(" ").Last();
+            if (string.IsNullOrEmpty(token))
+                return Unauthorized("No token provided.");
+
+            var isValid = await _authService.VerifyTokenAsync(token);
+            if (!isValid)
+                return Unauthorized("Invalid token.");
+
+            return Ok(new { message = "Token is valid." });
+        }
     }
 }

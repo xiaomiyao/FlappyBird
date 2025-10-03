@@ -17,6 +17,36 @@ namespace FlappyBird.Controllers
             _gameService = gameService;
         }
 
+        [HttpPost("start")]
+        [Authorize]
+        public async Task<IActionResult> StartGame([FromBody] BetRequest request)
+        {
+            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+            var session = await _gameService.PlaceBetAsync(userId, request.BetAmount, request.TargetBarriers, request.Difficulty);
+            if (session == null)
+                return BadRequest("Invalid bet or insufficient balance.");
+
+            return Ok(new { gameId = session.Id });
+        }
+
+        [HttpPost("end")]
+        [Authorize]
+        public async Task<IActionResult> EndGame([FromBody] GameResultRequest request)
+        {
+            var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+            var payout = await _gameService.SubmitResultAsync(userId, request.GameId, request.Score, request.Won);
+            if (payout == null)
+                return BadRequest("Invalid game or already submitted.");
+
+            return Ok(new
+            {
+                payout,
+                message = payout > 0 ? "You won!" : "You lost."
+            });
+        }
+
         [HttpPost("bet")]
         [Authorize]
         public async Task<IActionResult> PlaceBet([FromBody] BetRequest request)
