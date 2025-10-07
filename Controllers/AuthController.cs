@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace FlappyBird.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/auth")]
     public class AuthController : ControllerBase
     {
         private readonly AuthService _authService;
@@ -36,7 +36,7 @@ namespace FlappyBird.Controllers
             return Ok(new
             {
                 token = result.Token,
-                balance = result.Balance
+                user = new { username = request.Username, balance = result.Balance }
             });
         }
 
@@ -57,7 +57,21 @@ namespace FlappyBird.Controllers
             if (!isValid)
                 return Unauthorized("Invalid token.");
 
-            return Ok(new { message = "Token is valid." });
+            // Get user data from token
+            var tokenHandler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
+            var jsonToken = tokenHandler.ReadJwtToken(token);
+            var userIdClaim = jsonToken.Claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.NameIdentifier);
+            var usernameClaim = jsonToken.Claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.Name);
+
+            if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
+                return Unauthorized("Invalid token claims.");
+
+            // Get user from database
+            var user = await _authService.GetUserByIdAsync(userId);
+            if (user == null)
+                return Unauthorized("User not found.");
+
+            return Ok(new { user = new { id = user.Id, username = user.Username, balance = user.Balance } });
         }
     }
 }

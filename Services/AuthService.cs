@@ -74,6 +74,11 @@ namespace FlappyBird.Services
             }
         }
 
+        public async Task<User?> GetUserByIdAsync(Guid userId)
+        {
+            return await _mongo.Users.Find(u => u.Id == userId).FirstOrDefaultAsync();
+        }
+
         private string GenerateJwtToken(User user)
         {
             var claims = new[]

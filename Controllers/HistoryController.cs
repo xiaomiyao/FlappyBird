@@ -41,7 +41,7 @@ namespace FlappyBird.Controllers
                 .Limit(pageLimit)
                 .ToListAsync();
 
-            return Ok(history);
+            return Ok(new { games = history });
         }
 
         // DELETE /api/history

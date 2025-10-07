@@ -14,13 +14,20 @@ namespace FlappyBird.Services
             _mongo = mongo;
         }
 
-        public async Task<GameSession?> PlaceBetAsync(Guid userId, decimal betAmount, int targetBarriers, string difficulty)
+        public async Task<GameSession?> PlaceBetAsync(Guid userId, decimal betAmount, int targetBarriers, decimal difficulty)
         {
             if (betAmount < 1 || targetBarriers < 3 || targetBarriers > 20)
                 return null;
 
-            if (!Enum.TryParse<DifficultyLevel>(difficulty, true, out var parsedDifficulty))
-                return null;
+            // Convert decimal difficulty to DifficultyLevel enum
+            DifficultyLevel parsedDifficulty = difficulty switch
+            {
+                1.0m => DifficultyLevel.Easy,
+                1.5m => DifficultyLevel.Medium,
+                2.0m => DifficultyLevel.Hard,
+                2.5m => DifficultyLevel.Extreme,
+                _ => DifficultyLevel.Easy
+            };
 
             var user = await _mongo.Users.Find(u => u.Id == userId).FirstOrDefaultAsync();
             if (user == null || user.Balance < betAmount)

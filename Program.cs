@@ -9,15 +9,12 @@ using MongoDB.Bson.Serialization;
 using MongoDB.Bson.Serialization.Serializers;
 using System.Text;
 
-
 BsonSerializer.RegisterSerializer(new GuidSerializer(GuidRepresentation.Standard));
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-
-
 builder.Services.AddSwaggerGen(opt =>
 {
     opt.SwaggerDoc("v1", new OpenApiInfo { Title = "FlappyBird API", Version = "v1" });
@@ -47,6 +44,16 @@ builder.Services.AddSwaggerGen(opt =>
     });
 });
 
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(builder =>
+    {
+        builder.WithOrigins("http://localhost:5500", "http://127.0.0.1:5501")
+               .AllowAnyMethod()
+               .AllowAnyHeader()
+               .AllowCredentials();
+    });
+});
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -73,12 +80,16 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
+    app.UseDeveloperExceptionPage();
 }
 
 app.UseHttpsRedirection();
-
+app.UseStaticFiles();
+app.UseRouting();
+app.UseCors(); // Must come after routing and before auth
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
 app.Run();

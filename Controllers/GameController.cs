@@ -27,7 +27,12 @@ namespace FlappyBird.Controllers
             if (session == null)
                 return BadRequest("Invalid bet or insufficient balance.");
 
-            return Ok(new { gameId = session.Id });
+            var user = await _gameService.GetUserByIdAsync(userId);
+            return Ok(new
+            {
+                gameId = session.Id,
+                newBalance = user?.Balance ?? 0
+            });
         }
 
         [HttpPost("end")]
@@ -40,9 +45,11 @@ namespace FlappyBird.Controllers
             if (payout == null)
                 return BadRequest("Invalid game or already submitted.");
 
+            var user = await _gameService.GetUserByIdAsync(userId);
             return Ok(new
             {
-                payout,
+                winAmount = payout ?? 0,
+                newBalance = user?.Balance ?? 0,
                 message = payout > 0 ? "You won!" : "You lost."
             });
         }
@@ -77,7 +84,7 @@ namespace FlappyBird.Controllers
             });
         }
 
-        [HttpGet("/user/balance")]
+        [HttpGet("balance")]
         [Authorize]
         public async Task<IActionResult> GetBalance()
         {
