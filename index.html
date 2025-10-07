@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flappy Bird - Игра на ставки</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Баланс -->
+        <div class="balance-display" id="balanceDisplay">$0</div>
+
+        <!-- Экран входа -->
+        <div class="screen login-screen active" id="loginScreen">
+            <h1 class="title">Flappy Bird Casino</h1>
+            <div class="form-group">
+                <label for="username">Имя пользователя:</label>
+                <input type="text" id="username" placeholder="Введите имя">
+            </div>
+            <div class="form-group">
+                <label for="password">Пароль:</label>
+                <input type="password" id="password" placeholder="Введите пароль">
+            </div>
+            <button class="btn btn-primary" onclick="login()">Войти</button>
+            <button class="btn btn-secondary" onclick="register()">Регистрация</button>
+        </div>
+
+        <!-- Главное меню -->
+        <div class="screen menu-screen" id="menuScreen">
+            <h1 class="title">Главное меню</h1>
+            <p class="subtitle" id="welcomeText">Добро пожаловать!</p>
+            <button class="btn btn-primary" onclick="showBetScreen()">Начать игру</button>
+            <button class="btn btn-primary" onclick="showScreen('profileScreen')">Профиль</button>
+            <button class="btn btn-danger" onclick="logout()">Выйти</button>
+        </div>
+
+        <!-- Экран настроек ставки -->
+        <div class="screen bet-screen" id="betScreen">
+            <h1 class="title">Настройки ставки</h1>
+            
+            <div class="input-group">
+                <label>Цель (барьеры):</label>
+                <input type="number" id="targetBarriers" min="3" max="20" value="5">
+            </div>
+            
+            <div class="input-group">
+                <label>Ставка ($):</label>
+                <input type="number" id="betAmount" min="1" max="100" value="5">
+            </div>
+            
+            <div class="input-group">
+                <label>Сложность:</label>
+                <select id="difficulty">
+                    <option value="1">Легкая (x1.2)</option>
+                    <option value="1.5">Средняя (x1.5)</option>
+                    <option value="2">Сложная (x2.0)</option>
+                    <option value="2.5">Экстрим (x2.5)</option>
+                </select>
+            </div>
+
+            <div style="margin: 20px 0; text-align: center;">
+                <div>Потенциальный выигрыш: $<span id="potentialWin">6</span></div>
+            </div>
+
+            <button class="btn btn-primary" onclick="startGame()">Начать игру</button>
+            <button class="btn btn-secondary" onclick="showMenu()">Назад</button>
+        </div>
+
+        <!-- Игровой экран -->
+        <div class="screen game-screen" id="gameScreen">
+            <canvas id="gameCanvas" width="400" height="600"></canvas>
+            
+            <div class="game-ui">
+                <div>Счет: <span id="scoreDisplay">0</span></div>
+                <div>Цель: <span id="targetDisplay">5</span></div>
+                <div>Ставка: $<span id="betDisplay">5</span></div>
+            </div>
+
+            <div class="controls-hint">
+                Нажмите ПРОБЕЛ или кликните для прыжка
+            </div>
+
+            <div class="game-over" id="gameOverDialog" style="display: none;">
+                <h2 id="gameOverTitle">Игра окончена</h2>
+                <p id="gameOverText">Ваш результат: 0</p>
+                <p id="gameOverResult">Вы проиграли $5</p>
+                <button class="btn btn-primary" onclick="showBetScreen()">Играть снова</button>
+                <button class="btn btn-secondary" onclick="showMenu()">В меню</button>
+            </div>
+        </div>
+
+        <!-- Экран профиля -->
+<div class="screen profile-screen" id="profileScreen">
+    <h1 class="title">Профиль игрока</h1>
+    
+    <div class="profile-stats">
+        <div class="stat-item">
+            <span class="stat-label">Игрок:</span>
+            <span class="stat-value" id="profileUsername">-</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Баланс:</span>
+            <span class="stat-value" id="profileBalance">$0</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Всего игр:</span>
+            <span class="stat-value" id="totalGames">0</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Побед:</span>
+            <span class="stat-value" id="totalWins">0</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Процент побед:</span>
+            <span class="stat-value" id="winRate">0%</span>
+        </div>
+    </div>
+
+    <div class="crypto-controls">
+        <h3>Управление балансом</h3>
+        <div class="balance-actions">
+            <button class="btn btn-primary" onclick="depositWithMetaMask()">Пополнить через MetaMask</button>
+            <button class="btn btn-secondary" onclick="withdrawWithMetaMask()">Вывести на MetaMask</button>
+        </div>
+        <div class="input-group">
+            <label>Сумма (ETH):</label>
+            <input type="number" id="cryptoAmount" min="0.001" step="0.001" value="0.01">
+        </div>
+    </div>
+
+    <div class="history-section">
+        <h3>История операций</h3>
+        <div class="history-tabs">
+            <button class="tab-btn active" onclick="switchHistoryTab('games')">История игр</button>
+            <button class="tab-btn" onclick="switchHistoryTab('transactions')">История транзакций</button>
+        </div>
+        
+        <!-- История игр -->
+        <div id="gamesHistory" class="history-content active">
+            <div class="history-controls">
+                <button class="btn btn-small" onclick="clearHistory()">Очистить историю игр</button>
+            </div>
+            <div class="history-list" id="gameHistoryList">
+                <div class="history-empty">История игр пуста</div>
+            </div>
+        </div>
+
+        <!-- История транзакций -->
+        <div id="transactionsHistory" class="history-content">
+            <div class="history-controls">
+                <button class="btn btn-small" onclick="clearTransactionHistory()">Очистить историю транзакций</button>
+            </div>
+            <div class="history-list" id="transactionHistoryList">
+                <div class="history-empty">История транзакций пуста</div>
+            </div>
+        </div>
+    </div>
+
+    <button class="btn btn-secondary" onclick="showMenu()">Назад в меню</button>
+</div>
+
+    <script src="main.js"></script>
+</body>
+</html>
