@@ -1,7 +1,7 @@
 // ===========================================
 // КОНФИГУРАЦИЯ API
 // ===========================================
-const API_BASE_URL = 'http://localhost:5000/api'; // ИЗМЕНИТЕ НА URL ВАШЕГО API
+const API_BASE_URL = 'http://localhost:5186'; // Backend API URL
 let authToken = null;
 
 // ===========================================
@@ -28,15 +28,21 @@ async function apiRequest(endpoint, method = 'GET', body = null) {
     
     try {
         const response = await fetch(`${API_BASE_URL}${endpoint}`, options);
-        const data = await response.json();
+        
+        // Check if response has content
+        const text = await response.text();
+        const data = text ? JSON.parse(text) : {};
         
         if (!response.ok) {
-            throw new Error(data.error || data.message || 'Ошибка сервера');
+            throw new Error(data.error || data.message || `HTTP error! status: ${response.status}`);
         }
         
         return data;
     } catch (error) {
         console.error('API Error:', error);
+        if (error instanceof SyntaxError) {
+            throw new Error('Сервер вернул некорректный ответ');
+        }
         throw error;
     }
 }
@@ -94,11 +100,11 @@ async function checkMetaMask() {
 
 async function getContractAddress() {
     try {
-        const data = await apiRequest('/blockchain/contract-address');
-        return data.contractAddress;
+        const data = await apiRequest('/api/blockchain/contract-address');
+        return data.address;
     } catch (error) {
         console.error('Error getting contract address:', error);
-        return '0xAa29Ea824F38CD4A980680F250b6d721C30B5F64'; // Fallback адрес
+        return '0x742d35Cc6CF38c5d35E5E6B4f7C4E6A6E3f7f6B'; // Fallback адрес из бэкенда
     }
 }
 
@@ -118,10 +124,9 @@ async function depositWithMetaMask() {
         // Получаем адрес контракта с сервера
         const contractAddress = await getContractAddress();
         
-        // Инициируем депозит на сервере
-        const initData = await apiRequest('/crypto/deposit/initiate', 'POST', {
-            amount: parseFloat(amount),
-            walletAddress: account
+        // Инициируем депозит на сервере (бэк не ожидает walletAddress)
+        const initData = await apiRequest('/api/crypto/deposit/initiate', 'POST', {
+            amount: parseFloat(amount)
         });
         
         // Отправляем транзакцию через MetaMask
@@ -137,13 +142,14 @@ async function depositWithMetaMask() {
         alert('Транзакция отправлена! Ожидайте подтверждения...');
         
         // Подтверждаем депозит на сервере
-        const confirmData = await apiRequest('/crypto/deposit/confirm', 'POST', {
-            transactionHash: txHash,
-            depositId: initData.depositId
+        const confirmData = await apiRequest('/api/crypto/deposit/confirm', 'POST', {
+            depositId: initData.depositId,
+            amount: parseFloat(amount),
+            transactionHash: txHash
         });
         
-        currentUser.balance = confirmData.newBalance;
-        updateBalance();
+        // Обновляем баланс из ответа сервера
+        await updateBalance();
         await loadTransactionHistory();
         
         alert('Депозит успешно выполнен!');
@@ -165,8 +171,8 @@ async function withdrawWithMetaMask() {
     
     try {
         // Получаем курс обмена
-        const rateData = await apiRequest('/crypto/exchange-rate');
-        const gameTokens = parseFloat(amount) * rateData.ethToGameToken;
+        const rateData = await apiRequest('/api/crypto/exchange-rate');
+        const gameTokens = parseFloat(amount) * rateData.ethToGameCurrency; // Бэк возвращает ethToGameCurrency
         
         if (gameTokens > currentUser.balance) {
             alert('Недостаточно средств');
@@ -174,13 +180,13 @@ async function withdrawWithMetaMask() {
         }
         
         // Запрашиваем вывод
-        const withdrawData = await apiRequest('/crypto/withdraw/request', 'POST', {
+        const withdrawData = await apiRequest('/api/crypto/withdraw/request', 'POST', {
             amount: parseFloat(amount),
-            walletAddress: account
+            ethereumAddress: account // Бэк ожидает ethereumAddress
         });
         
-        currentUser.balance = withdrawData.newBalance;
-        updateBalance();
+        // Обновляем баланс
+        await updateBalance();
         await loadTransactionHistory();
         
         alert(`Запрос на вывод создан! ID: ${withdrawData.withdrawalId}\nСтатус можно отследить в истории транзакций`);
@@ -232,7 +238,7 @@ function checkAuthToken() {
 
 async function verifyToken() {
     try {
-        const data = await apiRequest('/auth/verify');
+        const data = await apiRequest('/api/auth/verify');
         currentUser = data.user;
         document.getElementById('welcomeText').textContent = `Добро пожаловать, ${currentUser.username}!`;
         showScreen('menuScreen');
@@ -258,7 +264,7 @@ async function login() {
     }
 
     try {
-        const data = await apiRequest('/auth/login', 'POST', {
+        const data = await apiRequest('/api/auth/login', 'POST', {
             username,
             password
         });
@@ -285,20 +291,22 @@ async function register() {
     }
 
     try {
-        await apiRequest('/auth/register', 'POST', {
-            username,
-            password
+        await apiRequest('/api/auth/register', 'POST', {
+            username: username,
+            password: password
         });
         
         alert('Регистрация успешна! Теперь войдите в систему.');
+        showScreen('loginScreen');
     } catch (error) {
+        console.error('Registration error:', error);
         alert(`Ошибка регистрации: ${error.message}`);
     }
 }
 
 async function logout() {
     try {
-        await apiRequest('/auth/logout', 'POST');
+        await apiRequest('/api/auth/logout', 'POST');
     } catch (error) {
         console.error('Logout error:', error);
     }
@@ -321,7 +329,7 @@ async function updateBalance() {
     }
     
     try {
-        const data = await apiRequest('/user/balance');
+        const data = await apiRequest('/api/game/balance');
         currentUser.balance = data.balance;
         balanceElement.textContent = `$${data.balance.toFixed(2)}`;
     } catch (error) {
@@ -398,7 +406,7 @@ async function startGame() {
 
     try {
         // Начинаем игру через API
-        const data = await apiRequest('/game/start', 'POST', {
+        const data = await apiRequest('/api/game/start', 'POST', {
             betAmount,
             targetBarriers,
             difficulty: parseFloat(document.getElementById('difficulty').value)
@@ -548,7 +556,7 @@ async function endGame(won) {
     
     try {
         // Отправляем результат игры на сервер
-        const data = await apiRequest('/game/end', 'POST', {
+        const data = await apiRequest('/api/game/end', 'POST', {
             gameId: gameState.gameId,
             won,
             score: gameState.score,
@@ -590,8 +598,8 @@ async function updateProfileData() {
     
     try {
         // Загружаем данные профиля
-        const profileData = await apiRequest('/user/profile');
-        const statsData = await apiRequest('/game/stats');
+        const profileData = await apiRequest('/api/profile/profile');
+        const statsData = await apiRequest('/api/stats');
         
         document.getElementById('profileUsername').textContent = profileData.username;
         document.getElementById('profileBalance').textContent = profileData.balance.toFixed(2);
@@ -636,7 +644,7 @@ async function loadGameHistory() {
         }
         
         try {
-            const data = await apiRequest('/game/history');
+            const data = await apiRequest('/api/history');
             
             if (!data.games || data.games.length === 0) {
                 historyList.innerHTML = '<div class="history-empty">История игр пуста</div>';
@@ -687,29 +695,36 @@ async function loadTransactionHistory() {
         }
         
         try {
-            const data = await apiRequest('/crypto/transactions');
+            const transactions = await apiRequest('/api/crypto/transactions');
             
-            if (!data.transactions || data.transactions.length === 0) {
+            // Бэк возвращает массив напрямую, не обернутый в объект
+            if (!transactions || transactions.length === 0) {
                 historyList.innerHTML = '<div class="history-empty">История транзакций пуста</div>';
                 return;
             }
 
-            historyList.innerHTML = data.transactions.map(tx => `
+            historyList.innerHTML = transactions.map(tx => `
                 <div class="transaction-item ${tx.type}">
                     <div class="transaction-info">
                         <div class="transaction-type">
                             ${tx.type === 'deposit' ? 'Пополнение' : 'Вывод'}
                         </div>
                         <div class="transaction-date">
-                            ${new Date(tx.timestamp).toLocaleString()}
+                            ${new Date(tx.timestamp).toLocaleString('ru-RU')}
                         </div>
                     </div>
                     <div class="transaction-amount">
                         ${tx.type === 'deposit' ? '+' : '-'}${tx.amount} ETH
                     </div>
-                    <div class="transaction-status">
-                        ${tx.status || 'completed'}
+                    <div class="transaction-status ${tx.status}">
+                        ${tx.status === 'completed' ? 'Завершено' : 
+                          tx.status === 'pending' ? 'В обработке' : tx.status}
                     </div>
+                    ${tx.transactionHash ? `
+                        <div class="transaction-hash" title="${tx.transactionHash}">
+                            TX: ${tx.transactionHash.substring(0, 10)}...
+                        </div>
+                    ` : ''}
                 </div>
             `).join('');
         } catch (error) {
@@ -758,7 +773,7 @@ async function clearHistory() {
     
     if (confirm('Вы уверены, что хотите очистить историю игр?')) {
         try {
-            await apiRequest('/game/history', 'DELETE');
+            await apiRequest('/api/history', 'DELETE');
             await loadGameHistory();
             await updateProfileData();
             alert('История игр очищена');
@@ -773,7 +788,7 @@ async function clearTransactionHistory() {
     
     if (confirm('Вы уверены, что хотите очистить историю транзакций?')) {
         try {
-            await apiRequest('/crypto/transactions', 'DELETE');
+            await apiRequest('/api/crypto/transactions', 'DELETE');
             await loadTransactionHistory();
             alert('История транзакций очищена');
         } catch (error) {
