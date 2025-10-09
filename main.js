@@ -101,10 +101,10 @@ async function checkMetaMask() {
 async function getContractAddress() {
     try {
         const data = await apiRequest('/api/blockchain/contract-address');
-        return data.contractAddress;
+        return data.address;
     } catch (error) {
         console.error('Error getting contract address:', error);
-        return '0xAa29Ea824F38CD4A980680F250b6d721C30B5F64'; // Fallback адрес
+        return '0x742d35Cc6CF38c5d35E5E6B4f7C4E6A6E3f7f6B'; // Fallback адрес из бэкенда
     }
 }
 
@@ -124,10 +124,9 @@ async function depositWithMetaMask() {
         // Получаем адрес контракта с сервера
         const contractAddress = await getContractAddress();
         
-        // Инициируем депозит на сервере
+        // Инициируем депозит на сервере (бэк не ожидает walletAddress)
         const initData = await apiRequest('/api/crypto/deposit/initiate', 'POST', {
-            amount: parseFloat(amount),
-            walletAddress: account
+            amount: parseFloat(amount)
         });
         
         // Отправляем транзакцию через MetaMask
@@ -144,12 +143,13 @@ async function depositWithMetaMask() {
         
         // Подтверждаем депозит на сервере
         const confirmData = await apiRequest('/api/crypto/deposit/confirm', 'POST', {
-            transactionHash: txHash,
-            depositId: initData.depositId
+            depositId: initData.depositId,
+            amount: parseFloat(amount),
+            transactionHash: txHash
         });
         
-        currentUser.balance = confirmData.newBalance;
-        updateBalance();
+        // Обновляем баланс из ответа сервера
+        await updateBalance();
         await loadTransactionHistory();
         
         alert('Депозит успешно выполнен!');
@@ -172,7 +172,7 @@ async function withdrawWithMetaMask() {
     try {
         // Получаем курс обмена
         const rateData = await apiRequest('/api/crypto/exchange-rate');
-        const gameTokens = parseFloat(amount) * rateData.ethToGameToken;
+        const gameTokens = parseFloat(amount) * rateData.ethToGameCurrency; // Бэк возвращает ethToGameCurrency
         
         if (gameTokens > currentUser.balance) {
             alert('Недостаточно средств');
@@ -182,11 +182,11 @@ async function withdrawWithMetaMask() {
         // Запрашиваем вывод
         const withdrawData = await apiRequest('/api/crypto/withdraw/request', 'POST', {
             amount: parseFloat(amount),
-            walletAddress: account
+            ethereumAddress: account // Бэк ожидает ethereumAddress
         });
         
-        currentUser.balance = withdrawData.newBalance;
-        updateBalance();
+        // Обновляем баланс
+        await updateBalance();
         await loadTransactionHistory();
         
         alert(`Запрос на вывод создан! ID: ${withdrawData.withdrawalId}\nСтатус можно отследить в истории транзакций`);
@@ -695,29 +695,36 @@ async function loadTransactionHistory() {
         }
         
         try {
-            const data = await apiRequest('/api/crypto/transactions');
+            const transactions = await apiRequest('/api/crypto/transactions');
             
-            if (!data.transactions || data.transactions.length === 0) {
+            // Бэк возвращает массив напрямую, не обернутый в объект
+            if (!transactions || transactions.length === 0) {
                 historyList.innerHTML = '<div class="history-empty">История транзакций пуста</div>';
                 return;
             }
 
-            historyList.innerHTML = data.transactions.map(tx => `
+            historyList.innerHTML = transactions.map(tx => `
                 <div class="transaction-item ${tx.type}">
                     <div class="transaction-info">
                         <div class="transaction-type">
                             ${tx.type === 'deposit' ? 'Пополнение' : 'Вывод'}
                         </div>
                         <div class="transaction-date">
-                            ${new Date(tx.timestamp).toLocaleString()}
+                            ${new Date(tx.timestamp).toLocaleString('ru-RU')}
                         </div>
                     </div>
                     <div class="transaction-amount">
                         ${tx.type === 'deposit' ? '+' : '-'}${tx.amount} ETH
                     </div>
-                    <div class="transaction-status">
-                        ${tx.status || 'completed'}
+                    <div class="transaction-status ${tx.status}">
+                        ${tx.status === 'completed' ? 'Завершено' : 
+                          tx.status === 'pending' ? 'В обработке' : tx.status}
                     </div>
+                    ${tx.transactionHash ? `
+                        <div class="transaction-hash" title="${tx.transactionHash}">
+                            TX: ${tx.transactionHash.substring(0, 10)}...
+                        </div>
+                    ` : ''}
                 </div>
             `).join('');
         } catch (error) {
