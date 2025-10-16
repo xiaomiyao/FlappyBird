@@ -57,16 +57,14 @@ namespace FlappyBird.Controllers
             if (!isValid)
                 return Unauthorized("Invalid token.");
 
-            // Get user data from token
+            // Extract user ID from token
             var tokenHandler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
-            var jsonToken = tokenHandler.ReadJwtToken(token);
-            var userIdClaim = jsonToken.Claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.NameIdentifier);
-            var usernameClaim = jsonToken.Claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.Name);
+            var jwtToken = tokenHandler.ReadJwtToken(token);
+            var userIdClaim = jwtToken.Claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.NameIdentifier);
 
             if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
-                return Unauthorized("Invalid token claims.");
+                return Unauthorized("Invalid token format.");
 
-            // Get user from database
             var user = await _authService.GetUserByIdAsync(userId);
             if (user == null)
                 return Unauthorized("User not found.");

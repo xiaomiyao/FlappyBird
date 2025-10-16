@@ -1,6 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using FlappyBird.Data;
+using FlappyBird.Models;
+using MongoDB.Driver;
 
 namespace FlappyBird.Controllers
 {
@@ -9,8 +12,11 @@ namespace FlappyBird.Controllers
     [Authorize]
     public class CryptoController : ControllerBase
     {
-        public CryptoController()
+        private readonly MongoDbContext _mongo;
+
+        public CryptoController(MongoDbContext mongo)
         {
+            _mongo = mongo;
         }
 
         [HttpPost("deposit/initiate")]
@@ -24,25 +30,45 @@ namespace FlappyBird.Controllers
             return Task.FromResult<IActionResult>(Ok(new
             {
                 depositId = depositId,
-                address = "0x742d35Cc6CF38c5d35E5E6B4f7C4E6A6E3f7f6B", // Contract address
+                address = "0xBE40374353462eC233F4B6AD14E86197fF600Ee6", // Contract address
                 amount = request.Amount,
                 message = "Deposit initiated. Send ETH to the address above."
             }));
         }
 
         [HttpPost("deposit/confirm")]
-        public Task<IActionResult> ConfirmDeposit([FromBody] ConfirmDepositRequest request)
+        public async Task<IActionResult> ConfirmDeposit([FromBody] ConfirmDepositRequest request)
         {
             var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
-            // Placeholder implementation            
-            return Task.FromResult<IActionResult>(Ok(new
+            try
             {
-                depositId = request.DepositId,
-                status = "confirmed",
-                amount = request.Amount,
-                message = "Deposit confirmed and balance updated."
-            }));
+                // Get exchange rate to convert ETH to game currency
+                var ethToGameCurrency = 10000.00m; // 1 ETH = 10,000 game currency units
+                var gameCurrencyAmount = request.Amount * ethToGameCurrency;
+
+                // Update user balance
+                var user = await _mongo.Users.Find(u => u.Id == userId).FirstOrDefaultAsync();
+                if (user == null)
+                    return NotFound("User not found.");
+
+                user.Balance += gameCurrencyAmount;
+                await _mongo.Users.ReplaceOneAsync(u => u.Id == userId, user);
+
+                return Ok(new
+                {
+                    depositId = request.DepositId,
+                    status = "confirmed",
+                    amount = request.Amount,
+                    gameCurrencyAmount = gameCurrencyAmount,
+                    newBalance = user.Balance,
+                    message = "Deposit confirmed and balance updated."
+                });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = $"Error confirming deposit: {ex.Message}" });
+            }
         }
 
         [HttpPost("withdraw/request")]
@@ -72,7 +98,6 @@ namespace FlappyBird.Controllers
                 withdrawalId = withdrawalId,
                 status = "completed",
                 amount = 0.1m,
-                address = "0x742d35Cc6CF38c5d35E5E6B4f7C4E6A6E3f7f6B",
                 transactionHash = "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
             }));
         }
